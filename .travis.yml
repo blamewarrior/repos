@@ -1,0 +1,9 @@
+language: go
+go:
+  - 1.7.3
+  - tip
+
+services:
+  - postgresql
+
+script: make test
