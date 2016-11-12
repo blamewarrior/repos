@@ -35,7 +35,7 @@ func TestGetRepositories(t *testing.T) {
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
-	_, err = db.Exec(blamewarrior.CreateRepositoryQuery, "blamewarrior/hooks", true)
+	_, err = db.Exec(blamewarrior.CreateRepositoryQuery, "blamewarrior/hooks", "test_token", true)
 
 	assert.NoError(t, err)
 

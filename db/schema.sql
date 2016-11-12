@@ -3,5 +3,6 @@ CREATE TABLE repositories (
   full_name VARCHAR,
             CONSTRAINT proper_full_name
             CHECK (full_name ~* '^([a-z0-9\-_]+)/([a-z0-9\-_]+)$'),
-  private BOOLEAN NOT NULL DEFAULT FALSE
+  token     VARCHAR NOT NULL,
+  private   BOOLEAN NOT NULL DEFAULT FALSE
 )

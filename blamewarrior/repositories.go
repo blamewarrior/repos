@@ -29,6 +29,7 @@ import (
 type Repository struct {
 	Id       int
 	FullName string
+	Token    string
 	Private  bool
 }
 
@@ -46,7 +47,7 @@ func GetRepositories(db *sql.DB) (repos []Repository, err error) {
 
 		var repo Repository
 
-		if err = rows.Scan(&repo.FullName, &repo.Private); err != nil {
+		if err = rows.Scan(&repo.FullName, &repo.Token, &repo.Private); err != nil {
 			return nil, fmt.Errorf("failed to fetch repository: %s", err)
 		}
 
@@ -58,7 +59,7 @@ func GetRepositories(db *sql.DB) (repos []Repository, err error) {
 }
 
 func CreateRepository(db *sql.DB, repo *Repository) (err error) {
-	err = db.QueryRow(CreateRepositoryQuery, repo.FullName, repo.Private).Scan(&repo.Id)
+	err = db.QueryRow(CreateRepositoryQuery, repo.FullName, repo.Token, repo.Private).Scan(&repo.Id)
 
 	if err != nil {
 		return fmt.Errorf("failed to create repository: %s", err)
@@ -78,7 +79,7 @@ func DeleteRepository(db *sql.DB, repositoryId int) (err error) {
 }
 
 const (
-	GetRepositoriesQuery  = `SELECT full_name, private FROM repositories`
-	CreateRepositoryQuery = `INSERT INTO repositories (full_name, private) VALUES ($1, $2) RETURNING id`
+	GetRepositoriesQuery  = `SELECT full_name, token, private FROM repositories`
+	CreateRepositoryQuery = `INSERT INTO repositories (full_name, token, private) VALUES ($1, $2, $3) RETURNING id`
 	DeleteRepositoryQuery = `DELETE FROM repositories WHERE id = $1`
 )
