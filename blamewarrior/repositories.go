@@ -58,7 +58,7 @@ func GetRepositories(db *sql.DB) (repos []Repository, err error) {
 
 }
 
-func CreateRepository(db *sql.DB, repo *Repository) (err error) {
+func CreateRepository(db Queryer, repo *Repository) (err error) {
 	err = db.QueryRow(CreateRepositoryQuery, repo.FullName, repo.Token, repo.Private).Scan(&repo.Id)
 
 	if err != nil {
@@ -68,7 +68,7 @@ func CreateRepository(db *sql.DB, repo *Repository) (err error) {
 	return err
 }
 
-func DeleteRepository(db *sql.DB, repositoryId int) (err error) {
+func DeleteRepository(db Queryer, repositoryId int) (err error) {
 	_, err = db.Exec(DeleteRepositoryQuery, repositoryId)
 
 	if err != nil {
