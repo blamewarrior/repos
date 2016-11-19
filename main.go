@@ -19,7 +19,30 @@
 
 package main
 
-import ()
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/bmizerany/pat"
+)
+
+func TrackRepositoryHandler(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprint(w, "OK")
+}
 
 func main() {
+	mux := pat.New()
+	mux.Get("/repositories/track", http.HandlerFunc(TrackRepositoryHandler))
+
+	http.Handle("/", mux)
+
+	log.Printf("blamewarrior hooks is running on 8080 port")
+
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Panic(err)
+	}
+
 }
