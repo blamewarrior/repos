@@ -1,2 +1,3 @@
-# hooks
-Hooks handler
+# repositories
+
+Handle info about tracked repositories and related github tokens
