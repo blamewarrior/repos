@@ -15,18 +15,6 @@
 			"revisionTime": "2016-10-29T20:57:26Z"
 		},
 		{
-			"checksumSHA1": "VPBPq5SDdW7Am6gcjnxdUEVZuIQ=",
-			"path": "github.com/google/go-github/github",
-			"revision": "55263f30529cb06f5b478efc333390b791cfe3b1",
-			"revisionTime": "2016-11-04T23:40:23Z"
-		},
-		{
-			"checksumSHA1": "yyAzHoiVLu+xywYI2BDyRq6sOqE=",
-			"path": "github.com/google/go-querystring/query",
-			"revision": "9235644dd9e52eeae6fa48efd539fdc351a0af53",
-			"revisionTime": "2016-03-11T01:20:12Z"
-		},
-		{
 			"checksumSHA1": "avqi4lkviHdrNJ92cXCwrw9x870=",
 			"path": "github.com/lib/pq",
 			"revision": "d8eeeb8bae8896dd8e1b7e514ab0d396c4f12a1b",
@@ -49,15 +37,7 @@
 			"path": "github.com/stretchr/testify/assert",
 			"revision": "976c720a22c8eb4eb6a0b4348ad85ad12491a506",
 			"revisionTime": "2016-09-25T22:06:09Z"
-		},
-		{
-			"path": "https://github.com/google/go-github",
-			"revision": ""
-		},
-		{
-			"path": "https://github.com/google/go-github/github",
-			"revision": ""
 		}
 	],
-	"rootPath": "github.com/blamewarrior/hooks"
+	"rootPath": "github.com/blamewarrior/repos"
 }

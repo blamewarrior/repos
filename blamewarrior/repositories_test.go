@@ -22,7 +22,7 @@ package blamewarrior_test
 import (
 	"database/sql"
 	"errors"
-	"github.com/blamewarrior/hooks/blamewarrior"
+	"github.com/blamewarrior/repos/blamewarrior"
 	"github.com/stretchr/testify/assert"
 	"log"
 	"os"
