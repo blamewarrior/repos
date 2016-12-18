@@ -22,11 +22,14 @@ package blamewarrior_test
 import (
 	"database/sql"
 	"errors"
-	"github.com/blamewarrior/repos/blamewarrior"
-	"github.com/stretchr/testify/assert"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/blamewarrior/repos/blamewarrior"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetRepositories(t *testing.T) {
@@ -37,12 +40,12 @@ func TestGetRepositories(t *testing.T) {
 
 	_, err = db.Exec(blamewarrior.CreateRepositoryQuery, "blamewarrior/hooks", "test_token", true)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	results, err := blamewarrior.GetRepositories(db)
 
-	assert.NoError(t, err)
-	assert.NotEmpty(t, results)
+	require.NoError(t, err)
+	require.NotEmpty(t, results)
 }
 
 func TestCreateRepository(t *testing.T) {
@@ -51,18 +54,18 @@ func TestCreateRepository(t *testing.T) {
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	results := []struct {
 		Repo *blamewarrior.Repository
 		Err  error
 	}{
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior/hooks", Private: true},
+			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos", Private: true},
 			Err:  nil,
 		},
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior&*()/hooks", Private: true},
+			Repo: &blamewarrior.Repository{FullName: "blamewarrior&*()/repos", Private: true},
 			Err:  errors.New(`failed to create repository: pq: new row for relation "repositories" violates check constraint "proper_full_name"`),
 		},
 	}
@@ -74,21 +77,40 @@ func TestCreateRepository(t *testing.T) {
 	}
 }
 
+func TestUpdateRepository(t *testing.T) {
+	db, teardown := setup()
+	defer teardown()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	require.NoError(t, err)
+
+	repo := &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token", Private: true}
+	err = blamewarrior.CreateRepository(db, repo)
+	require.NoError(t, err)
+
+	err = blamewarrior.UpdateRepository(db, repo)
+
+	require.NoError(t, err)
+
+	require.NoError(t, checkRepositoryConsistentWithDB(t, repo, db))
+}
+
 func TestDeleteRepository(t *testing.T) {
 	db, teardown := setup()
 	defer teardown()
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	repo := &blamewarrior.Repository{FullName: "blamewarrior/hooks", Private: true}
+	repo := &blamewarrior.Repository{FullName: "blamewarrior/repos", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	err = blamewarrior.DeleteRepository(db, repo.Id)
+	err = blamewarrior.DeleteRepository(db, repo.ID)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func setup() (db *sql.DB, teardownFn func()) {
@@ -114,4 +136,29 @@ func setup() (db *sql.DB, teardownFn func()) {
 			log.Printf("failed to close database connection: %s", err)
 		}
 	}
+}
+
+func checkRepositoryConsistentWithDB(t *testing.T, repo *blamewarrior.Repository, db *sql.DB) error {
+	var (
+		token   string
+		private bool
+	)
+
+	require.NoError(t, db.QueryRow(
+		`SELECT token, private FROM repositories WHERE id = $1 LIMIT 1;`,
+		repo.ID,
+	).Scan(
+		&token,
+		&private,
+	))
+
+	assert.Equal(t, token, repo.Token)
+
+	if private {
+		assert.True(t, repo.Private)
+	} else {
+		assert.False(t, repo.Private)
+	}
+
+	return nil
 }

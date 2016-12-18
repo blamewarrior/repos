@@ -27,7 +27,7 @@ import (
 )
 
 type Repository struct {
-	Id       int
+	ID       int
 	FullName string
 	Token    string
 	Private  bool
@@ -59,7 +59,7 @@ func GetRepositories(db *sql.DB) (repos []Repository, err error) {
 }
 
 func CreateRepository(db Queryer, repo *Repository) (err error) {
-	err = db.QueryRow(CreateRepositoryQuery, repo.FullName, repo.Token, repo.Private).Scan(&repo.Id)
+	err = db.QueryRow(CreateRepositoryQuery, repo.FullName, repo.Token, repo.Private).Scan(&repo.ID)
 
 	if err != nil {
 		return fmt.Errorf("failed to create repository: %s", err)
@@ -68,8 +68,18 @@ func CreateRepository(db Queryer, repo *Repository) (err error) {
 	return err
 }
 
-func DeleteRepository(db Queryer, repositoryId int) (err error) {
-	_, err = db.Exec(DeleteRepositoryQuery, repositoryId)
+func UpdateRepository(db Queryer, repo *Repository) (err error) {
+	err = db.QueryRow(UpdateRepositoryQuery, repo.ID, repo.Token, repo.Private).Scan(&repo.ID)
+
+	if err == sql.ErrNoRows {
+		return nil
+	}
+
+	return err
+}
+
+func DeleteRepository(db Queryer, repositoryID int) (err error) {
+	_, err = db.Exec(DeleteRepositoryQuery, repositoryID)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete repository: %s", err)
@@ -81,5 +91,6 @@ func DeleteRepository(db Queryer, repositoryId int) (err error) {
 const (
 	GetRepositoriesQuery  = `SELECT full_name, token, private FROM repositories`
 	CreateRepositoryQuery = `INSERT INTO repositories (full_name, token, private) VALUES ($1, $2, $3) RETURNING id`
+	UpdateRepositoryQuery = `UPDATE repositories SET token = $2, private = $3 WHERE id = $1 RETURNING id;`
 	DeleteRepositoryQuery = `DELETE FROM repositories WHERE id = $1`
 )
