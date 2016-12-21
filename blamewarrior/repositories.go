@@ -28,9 +28,9 @@ import (
 
 type Repository struct {
 	ID       int
-	FullName string
-	Token    string
-	Private  bool
+	FullName string `json:"full_name"`
+	Token    string `json:"token"`
+	Private  bool   `json:"private"`
 }
 
 func GetRepositories(db *sql.DB) (repos []Repository, err error) {

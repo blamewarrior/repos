@@ -20,25 +20,57 @@
 package main
 
 import (
-	// "encoding/json"
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 
 	"github.com/bmizerany/pat"
+
+	"github.com/blamewarrior/repos/blamewarrior"
 )
 
-func TrackRepositoryHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprint(w, "OK")
+func CreateRepositoryHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	body, err := requestBody(req)
+
+	if err != nil {
+		log.Printf("%s\t%s\t%s\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, "500: Internal server error")
+	}
+
+	repository := &blamewarrior.Repository{}
+
+	if err := json.Unmarshal(body, &repository); err != nil {
+
+		fmt.Fprintf(w, "Error: %s", err)
+	}
+
+}
+
+func requestBody(r *http.Request) ([]byte, error) {
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1048576))
+
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Body.Close(); err != nil {
+		return nil, err
+	}
+	return body, err
 }
 
 func main() {
 	mux := pat.New()
-	mux.Get("/repositories/track", http.HandlerFunc(TrackRepositoryHandler))
+	mux.Post("/repositories", http.HandlerFunc(CreateRepositoryHandler))
 
 	http.Handle("/", mux)
 
-	log.Printf("blamewarrior hooks is running on 8080 port")
+	log.Printf("blamewarrior repositories is running on 8080 port")
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
