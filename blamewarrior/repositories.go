@@ -33,6 +33,17 @@ type Repository struct {
 	Private  bool   `json:"private"`
 }
 
+func (repo *Repository) Validate() error {
+	if repo.FullName == "" {
+		return fmt.Errorf("full name must not be empty")
+	}
+
+	if repo.Token == "" {
+		return fmt.Errorf("token must not be empty")
+	}
+	return nil
+}
+
 func GetRepositories(db *sql.DB) (repos []Repository, err error) {
 
 	rows, err := db.Query(GetRepositoriesQuery)

@@ -22,26 +22,92 @@ package main
 import (
 	// "encoding/json"
 
-	"strings"
-
 	"net/http"
 	"net/http/httptest"
+
+	"database/sql"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
 
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/blamewarrior/repos/blamewarrior"
 )
 
 func TestCreateRepositoryHandler(t *testing.T) {
 
-	req, err := http.NewRequest("POST", "/repositories", strings.NewReader(`{"full_name":"blamewarrior/repos", "token":"test_token"}`))
+	db, teardown := setup()
+	defer teardown()
+
+	log.SetOutput(ioutil.Discard)
+
+	_, err := db.Exec("TRUNCATE repositories;")
 
 	require.NoError(t, err)
 
-	w := httptest.NewRecorder()
+	repositoryHandlers := &RepositoryHandlers{db}
 
-	CreateRepositoryHandler(w, req)
+	results := []struct {
+		RequestBody  string
+		ResponseCode int
+		ResponseBody string
+	}{
+		{
+			RequestBody:  `{"full_name":"blamewarrior/repos", "token":"test_token"}`,
+			ResponseCode: http.StatusCreated,
+			ResponseBody: "",
+		},
+		{
+			RequestBody:  `{"full_name":"blamewarrior/repos"}`,
+			ResponseCode: http.StatusUnprocessableEntity,
+			ResponseBody: "",
+		},
+		{
+			RequestBody:  `{"full_name":"blamewarrior&*()/repos", "token":"test_token"}`,
+			ResponseCode: http.StatusInternalServerError,
+			ResponseBody: "",
+		},
+	}
 
-	assert.Equal(t, w.Code, http.StatusOK)
+	for _, result := range results {
+		req, err := http.NewRequest("POST", "/repositories", strings.NewReader(result.RequestBody))
+
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+
+		repositoryHandlers.CreateRepository(w, req)
+
+		assert.Equal(t, w.Code, result.ResponseCode)
+	}
+}
+
+func setup() (db *sql.DB, teardownFn func()) {
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		log.Fatal("missing test database name (expected to be passed via ENV['DB_NAME'])")
+	}
+
+	opts := &blamewarrior.DatabaseOptions{
+		Host:     os.Getenv("DB_HOST"),
+		Port:     os.Getenv("DB_PORT"),
+		User:     os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
+	}
+
+	db, err := blamewarrior.ConnectDatabase(dbName, opts)
+	if err != nil {
+		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
+	}
+
+	return db, func() {
+		if err := db.Close(); err != nil {
+			log.Printf("failed to close database connection: %s", err)
+		}
+	}
 }

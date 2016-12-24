@@ -32,6 +32,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRepositoryValidation(t *testing.T) {
+	db, teardown := setup()
+	defer teardown()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	require.NoError(t, err)
+
+	results := []struct {
+		Repo *blamewarrior.Repository
+		Err  error
+	}{
+		{
+			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token"},
+			Err:  nil,
+		},
+		{
+			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos"},
+			Err:  errors.New(`token must not be empty`),
+		},
+		{
+			Repo: &blamewarrior.Repository{Token: "test_token"},
+			Err:  errors.New(`full name must not be empty`),
+		},
+	}
+
+	for _, result := range results {
+		repo := result.Repo
+		err = repo.Validate()
+		assert.Equal(t, err, result.Err)
+	}
+}
+
 func TestGetRepositories(t *testing.T) {
 	db, teardown := setup()
 	defer teardown()
@@ -61,11 +94,11 @@ func TestCreateRepository(t *testing.T) {
 		Err  error
 	}{
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos", Private: true},
+			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token", Private: true},
 			Err:  nil,
 		},
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior&*()/repos", Private: true},
+			Repo: &blamewarrior.Repository{FullName: "blamewarrior&*()/repos", Token: "test_token", Private: true},
 			Err:  errors.New(`failed to create repository: pq: new row for relation "repositories" violates check constraint "proper_full_name"`),
 		},
 	}
@@ -104,7 +137,7 @@ func TestDeleteRepository(t *testing.T) {
 
 	require.NoError(t, err)
 
-	repo := &blamewarrior.Repository{FullName: "blamewarrior/repos", Private: true}
+	repo := &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
 	require.NoError(t, err)
 
