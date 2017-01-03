@@ -37,12 +37,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/blamewarrior/repos/blamewarrior"
+	"github.com/blamewarrior/repos/blamewarrior/hooks"
 )
 
 func TestCreateRepositoryHandler(t *testing.T) {
 
-	db, teardown := setup()
+	db, mux, teardown := setup()
 	defer teardown()
+
+	mux.HandleFunc("/hooks/repositories", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
 
 	log.SetOutput(ioutil.Discard)
 
@@ -50,7 +55,7 @@ func TestCreateRepositoryHandler(t *testing.T) {
 
 	require.NoError(t, err)
 
-	repositoryHandlers := &RepositoryHandlers{db}
+	handlers := &Handlers{db}
 
 	results := []struct {
 		RequestBody  string
@@ -81,14 +86,21 @@ func TestCreateRepositoryHandler(t *testing.T) {
 
 		w := httptest.NewRecorder()
 
-		repositoryHandlers.CreateRepository(w, req)
+		handlers.CreateRepository(w, req)
 
-		assert.Equal(t, w.Code, result.ResponseCode)
+		assert.Equal(t, result.ResponseCode, w.Code)
 	}
 }
 
-func setup() (db *sql.DB, teardownFn func()) {
+func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {
 	dbName := os.Getenv("DB_NAME")
+
+	mux = http.NewServeMux()
+	server := httptest.NewServer(mux)
+
+	client := hooks.NewClient()
+	client.BaseURL = server.URL
+
 	if dbName == "" {
 		log.Fatal("missing test database name (expected to be passed via ENV['DB_NAME'])")
 	}
@@ -105,7 +117,7 @@ func setup() (db *sql.DB, teardownFn func()) {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
 
-	return db, func() {
+	return db, mux, func() {
 		if err := db.Close(); err != nil {
 			log.Printf("failed to close database connection: %s", err)
 		}

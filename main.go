@@ -20,11 +20,6 @@
 package main
 
 import (
-	"database/sql"
-	"encoding/json"
-	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -33,59 +28,6 @@ import (
 
 	"github.com/blamewarrior/repos/blamewarrior"
 )
-
-type RepositoryHandlers struct {
-	db *sql.DB
-}
-
-func (h *RepositoryHandlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
-	body, err := requestBody(req)
-
-	if err != nil {
-		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, "500: Internal server error")
-		return
-	}
-
-	repository := &blamewarrior.Repository{}
-
-	if err := json.Unmarshal(body, &repository); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, "Error when unmarshalling json: %s", err)
-		return
-	}
-
-	if err := repository.Validate(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, "Error when creating repository: %s", err)
-		return
-	}
-
-	if err := blamewarrior.CreateRepository(h.db, repository); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	return
-
-}
-
-func requestBody(r *http.Request) ([]byte, error) {
-	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1048576))
-
-	if err != nil {
-		return nil, err
-	}
-	if err := r.Body.Close(); err != nil {
-		return nil, err
-	}
-	return body, err
-}
 
 func main() {
 
@@ -106,7 +48,7 @@ func main() {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
 
-	handlers := &RepositoryHandlers{db}
+	handlers := &Handlers{db}
 
 	mux := pat.New()
 	mux.Post("/repositories", http.HandlerFunc(handlers.CreateRepository))
