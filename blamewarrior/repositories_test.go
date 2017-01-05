@@ -110,25 +110,6 @@ func TestCreateRepository(t *testing.T) {
 	}
 }
 
-func TestUpdateRepository(t *testing.T) {
-	db, teardown := setup()
-	defer teardown()
-
-	_, err := db.Exec("TRUNCATE repositories;")
-
-	require.NoError(t, err)
-
-	repo := &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token", Private: true}
-	err = blamewarrior.CreateRepository(db, repo)
-	require.NoError(t, err)
-
-	err = blamewarrior.UpdateRepository(db, repo)
-
-	require.NoError(t, err)
-
-	require.NoError(t, checkRepositoryConsistentWithDB(t, repo, db))
-}
-
 func TestDeleteRepository(t *testing.T) {
 	db, teardown := setup()
 	defer teardown()

@@ -33,7 +33,8 @@ import (
 )
 
 type Handlers struct {
-	db *sql.DB
+	client *hooks.Client
+	db     *sql.DB
 }
 
 func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
@@ -73,9 +74,7 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	client := hooks.NewClient()
-
-	if err := client.CreateHook(repository.FullName); err != nil {
+	if err := h.client.CreateHook(repository.FullName); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
 		return

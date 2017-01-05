@@ -79,16 +79,6 @@ func CreateRepository(db Queryer, repo *Repository) (err error) {
 	return err
 }
 
-func UpdateRepository(db Queryer, repo *Repository) (err error) {
-	err = db.QueryRow(UpdateRepositoryQuery, repo.ID, repo.Token, repo.Private).Scan(&repo.ID)
-
-	if err == sql.ErrNoRows {
-		return nil
-	}
-
-	return err
-}
-
 func DeleteRepository(db Queryer, repositoryID int) (err error) {
 	_, err = db.Exec(DeleteRepositoryQuery, repositoryID)
 

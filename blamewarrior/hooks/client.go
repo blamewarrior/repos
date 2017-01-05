@@ -7,18 +7,18 @@ import (
 	"net/http"
 )
 
-type APIClient interface {
+type API interface {
 	Do(req *http.Request) (resp *http.Response, err error)
 	Get(url string) (resp *http.Response, err error)
 	Post(url string, bodyType string, body io.Reader) (resp *http.Response, err error)
 }
 
-type HooksClient struct {
+type Client struct {
 	BaseURL string
-	c       APIClient
+	c       API
 }
 
-func (client *HooksClient) CreateHook(repositoryName string) error {
+func (client *Client) CreateHook(repositoryName string) error {
 
 	payload := []byte(fmt.Sprintf(`{"full_name":"%s"}`, repositoryName))
 
@@ -36,8 +36,8 @@ func (client *HooksClient) CreateHook(repositoryName string) error {
 
 }
 
-func NewClient() *HooksClient {
-	client := &HooksClient{
+func NewClient() *Client {
+	client := &Client{
 		BaseURL: "https://blamewarrior.com/hooks",
 		c:       http.DefaultClient,
 	}

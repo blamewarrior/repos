@@ -27,6 +27,7 @@ import (
 	"github.com/bmizerany/pat"
 
 	"github.com/blamewarrior/repos/blamewarrior"
+	"github.com/blamewarrior/repos/blamewarrior/hooks"
 )
 
 func main() {
@@ -48,7 +49,9 @@ func main() {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
 
-	handlers := &Handlers{db}
+	client := hooks.NewClient()
+
+	handlers := &Handlers{client, db}
 
 	mux := pat.New()
 	mux.Post("/repositories", http.HandlerFunc(handlers.CreateRepository))

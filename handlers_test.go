@@ -20,8 +20,6 @@
 package main
 
 import (
-	// "encoding/json"
-
 	"net/http"
 	"net/http/httptest"
 
@@ -45,6 +43,11 @@ func TestCreateRepositoryHandler(t *testing.T) {
 	db, mux, teardown := setup()
 	defer teardown()
 
+	server := httptest.NewServer(mux)
+
+	client := hooks.NewClient()
+	client.BaseURL = server.URL + "/hooks"
+
 	mux.HandleFunc("/hooks/repositories", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	})
@@ -55,7 +58,7 @@ func TestCreateRepositoryHandler(t *testing.T) {
 
 	require.NoError(t, err)
 
-	handlers := &Handlers{db}
+	handlers := &Handlers{client, db}
 
 	results := []struct {
 		RequestBody  string
@@ -96,10 +99,6 @@ func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {
 	dbName := os.Getenv("DB_NAME")
 
 	mux = http.NewServeMux()
-	server := httptest.NewServer(mux)
-
-	client := hooks.NewClient()
-	client.BaseURL = server.URL
 
 	if dbName == "" {
 		log.Fatal("missing test database name (expected to be passed via ENV['DB_NAME'])")
