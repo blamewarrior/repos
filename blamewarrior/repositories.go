@@ -27,7 +27,7 @@ import (
 )
 
 type Repository struct {
-	ID       int
+	ID       int    `json:"-"`
 	FullName string `json:"full_name"`
 	Token    string `json:"token"`
 	Private  bool   `json:"private"`
@@ -44,9 +44,9 @@ func (repo *Repository) Validate() error {
 	return nil
 }
 
-func GetRepositories(db *sql.DB) (repos []Repository, err error) {
+func GetRepositories(db *sql.DB, token string) (repos []Repository, err error) {
 
-	rows, err := db.Query(GetRepositoriesQuery)
+	rows, err := db.Query(GetRepositoriesQuery, token)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch repositories: %s", err)
@@ -79,8 +79,8 @@ func CreateRepository(db Queryer, repo *Repository) (err error) {
 	return err
 }
 
-func DeleteRepository(db Queryer, repositoryID int) (err error) {
-	_, err = db.Exec(DeleteRepositoryQuery, repositoryID)
+func DeleteRepository(db Queryer, repositoryName string) (err error) {
+	_, err = db.Exec(DeleteRepositoryQuery, repositoryName)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete repository: %s", err)
@@ -90,8 +90,7 @@ func DeleteRepository(db Queryer, repositoryID int) (err error) {
 }
 
 const (
-	GetRepositoriesQuery  = `SELECT full_name, token, private FROM repositories`
+	GetRepositoriesQuery  = `SELECT full_name, token, private FROM repositories WHERE token = $1`
 	CreateRepositoryQuery = `INSERT INTO repositories (full_name, token, private) VALUES ($1, $2, $3) RETURNING id`
-	UpdateRepositoryQuery = `UPDATE repositories SET token = $2, private = $3 WHERE id = $1 RETURNING id;`
-	DeleteRepositoryQuery = `DELETE FROM repositories WHERE id = $1`
+	DeleteRepositoryQuery = `DELETE FROM repositories WHERE full_name = $1`
 )

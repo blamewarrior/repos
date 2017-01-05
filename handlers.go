@@ -37,7 +37,40 @@ type Handlers struct {
 	db     *sql.DB
 }
 
+func (h *Handlers) GetRepositories(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	token := req.URL.Query().Get("token")
+
+	if token == "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, "Token must not be empty")
+		return
+	}
+
+	results, err := blamewarrior.GetRepositories(h.db, token)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("%s\t%s\t%v\t%s", "GET", req.RequestURI, http.StatusInternalServerError, err)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(results); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprintf(w, "Error when unmarshalling json")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	return
+}
+
 func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
+
+	var err error
+
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	body, err := requestBody(req)
@@ -49,13 +82,13 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 
 	repository := &blamewarrior.Repository{}
 
-	if err := json.Unmarshal(body, &repository); err != nil {
+	if err = json.Unmarshal(body, &repository); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, "Error when unmarshalling json")
 		return
 	}
 
-	if err := repository.Validate(); err != nil {
+	if err = repository.Validate(); err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		fmt.Fprintf(w, "Error when creating repository: %s", err)
 		return
@@ -68,13 +101,13 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := blamewarrior.CreateRepository(tx, repository); err != nil {
+	if err = blamewarrior.CreateRepository(tx, repository); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
 		return
 	}
 
-	if err := h.client.CreateHook(repository.FullName); err != nil {
+	if err = h.client.CreateHook(repository.FullName); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
 		return
@@ -89,6 +122,41 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 	}()
 
 	w.WriteHeader(http.StatusCreated)
+	return
+
+}
+
+func (h Handlers) DeleteRepository(w http.ResponseWriter, req *http.Request) {
+	var err error
+
+	owner := req.URL.Query().Get(":owner")
+	name := req.URL.Query().Get(":name")
+
+	repositoryName := owner + "/" + name
+
+	tx, err := h.db.Begin()
+
+	if err = blamewarrior.DeleteRepository(tx, repositoryName); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("%s\t%s\t%v\t%s", "DELETE", req.RequestURI, http.StatusInternalServerError, err)
+		return
+	}
+
+	if err = h.client.DeleteHook(repositoryName); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("%s\t%s\t%v\t%s", "DELETE", req.RequestURI, http.StatusInternalServerError, err)
+		return
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+		err = tx.Commit()
+	}()
+
+	w.WriteHeader(http.StatusNoContent)
 	return
 
 }

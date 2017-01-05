@@ -1,21 +1,33 @@
+/*
+   Copyright (C) 2016 The BlameWarrior Authors.
+
+   This file is a part of BlameWarrior service.
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package hooks
 
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net/http"
 )
 
-type API interface {
-	Do(req *http.Request) (resp *http.Response, err error)
-	Get(url string) (resp *http.Response, err error)
-	Post(url string, bodyType string, body io.Reader) (resp *http.Response, err error)
-}
-
 type Client struct {
 	BaseURL string
-	c       API
+	c       *http.Client
 }
 
 func (client *Client) CreateHook(repositoryName string) error {
@@ -34,6 +46,26 @@ func (client *Client) CreateHook(repositoryName string) error {
 
 	return nil
 
+}
+
+func (client *Client) DeleteHook(repositoryName string) error {
+	url := client.BaseURL + "/repositories/" + repositoryName
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+
+	response, err := client.c.Do(req)
+
+	if err != nil {
+		return err
+	}
+
+	if response.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("Impossible to delete hook for %s", repositoryName)
+	}
+	return nil
 }
 
 func NewClient() *Client {

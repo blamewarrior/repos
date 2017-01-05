@@ -75,7 +75,7 @@ func TestGetRepositories(t *testing.T) {
 
 	require.NoError(t, err)
 
-	results, err := blamewarrior.GetRepositories(db)
+	results, err := blamewarrior.GetRepositories(db, "test_token")
 
 	require.NoError(t, err)
 	require.NotEmpty(t, results)
@@ -122,7 +122,7 @@ func TestDeleteRepository(t *testing.T) {
 	err = blamewarrior.CreateRepository(db, repo)
 	require.NoError(t, err)
 
-	err = blamewarrior.DeleteRepository(db, repo.ID)
+	err = blamewarrior.DeleteRepository(db, repo.FullName)
 
 	require.NoError(t, err)
 }

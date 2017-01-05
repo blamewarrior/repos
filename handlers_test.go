@@ -22,8 +22,10 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 
 	"database/sql"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -38,9 +40,64 @@ import (
 	"github.com/blamewarrior/repos/blamewarrior/hooks"
 )
 
+func TestGetRepositoriesHandler(t *testing.T) {
+	db, _, teardown := setup()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	require.NoError(t, err)
+
+	client := hooks.NewClient()
+
+	handlers := &Handlers{client, db}
+
+	defer teardown()
+
+	repo := &blamewarrior.Repository{FullName: "blamewarrior/test_repo", Token: "test_token", Private: true}
+	err = blamewarrior.CreateRepository(db, repo)
+
+	require.NoError(t, err)
+
+	results := []struct {
+		Token        string
+		ResponseCode int
+		ResponseBody string
+	}{
+		{
+			Token:        "",
+			ResponseCode: http.StatusUnprocessableEntity,
+			ResponseBody: "Token must not be empty",
+		},
+		{
+			Token:        "test_token",
+			ResponseCode: http.StatusOK,
+			ResponseBody: "[{\"full_name\":\"blamewarrior/test_repo\",\"token\":\"test_token\",\"private\":true}]\n",
+		},
+	}
+
+	for _, result := range results {
+		req, err := http.NewRequest("POST", "/repositories?token="+result.Token, nil)
+
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+
+		handlers.GetRepositories(w, req)
+
+		assert.Equal(t, result.ResponseCode, w.Code)
+		assert.Equal(t, result.ResponseBody, fmt.Sprintf("%v", w.Body))
+	}
+
+}
+
 func TestCreateRepositoryHandler(t *testing.T) {
 
 	db, mux, teardown := setup()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	require.NoError(t, err)
+
 	defer teardown()
 
 	server := httptest.NewServer(mux)
@@ -53,10 +110,6 @@ func TestCreateRepositoryHandler(t *testing.T) {
 	})
 
 	log.SetOutput(ioutil.Discard)
-
-	_, err := db.Exec("TRUNCATE repositories;")
-
-	require.NoError(t, err)
 
 	handlers := &Handlers{client, db}
 
@@ -73,7 +126,7 @@ func TestCreateRepositoryHandler(t *testing.T) {
 		{
 			RequestBody:  `{"full_name":"blamewarrior/repos"}`,
 			ResponseCode: http.StatusUnprocessableEntity,
-			ResponseBody: "",
+			ResponseBody: "Error when creating repository: token must not be empty",
 		},
 		{
 			RequestBody:  `{"full_name":"blamewarrior&*()/repos", "token":"test_token"}`,
@@ -92,7 +145,46 @@ func TestCreateRepositoryHandler(t *testing.T) {
 		handlers.CreateRepository(w, req)
 
 		assert.Equal(t, result.ResponseCode, w.Code)
+		assert.Equal(t, result.ResponseBody, fmt.Sprintf("%v", w.Body))
 	}
+}
+
+func TestDeleteRepositoryHandler(t *testing.T) {
+	db, mux, teardown := setup()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	defer teardown()
+
+	server := httptest.NewServer(mux)
+
+	client := hooks.NewClient()
+	client.BaseURL = server.URL + "/hooks"
+
+	mux.HandleFunc("/hooks/repositories/blamewarrior/test_repo", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	repo := &blamewarrior.Repository{FullName: "blamewarrior/test_repo", Token: "test_token", Private: true}
+	err = blamewarrior.CreateRepository(db, repo)
+
+	require.NoError(t, err)
+
+	handlers := &Handlers{client, db}
+
+	urlValues := make(url.Values)
+	urlValues[":owner"] = []string{"blamewarrior"}
+	urlValues[":name"] = []string{"test_repo"}
+
+	req, err := http.NewRequest("DELETE", "/repositories?"+urlValues.Encode(), nil)
+
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+
+	handlers.DeleteRepository(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
 }
 
 func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {

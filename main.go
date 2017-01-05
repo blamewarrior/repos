@@ -54,7 +54,9 @@ func main() {
 	handlers := &Handlers{client, db}
 
 	mux := pat.New()
+
 	mux.Post("/repositories", http.HandlerFunc(handlers.CreateRepository))
+	mux.Del("/repositories/:owner/:name", http.HandlerFunc(handlers.DeleteRepository))
 
 	http.Handle("/", mux)
 
