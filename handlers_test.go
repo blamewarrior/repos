@@ -208,7 +208,15 @@ func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
 
+	tx, err := db.Begin()
+
+	if err != nil {
+		log.Fatal("failed to create transaction, %s", err)
+	}
+
 	return db, mux, func() {
+		tx.Rollback()
+
 		if err := db.Close(); err != nil {
 			log.Printf("failed to close database connection: %s", err)
 		}

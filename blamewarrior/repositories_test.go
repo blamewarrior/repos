@@ -144,35 +144,16 @@ func setup() (db *sql.DB, teardownFn func()) {
 	if err != nil {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
+	tx, err := db.Begin()
+
+	if err != nil {
+		log.Fatal("failed to create transaction, %s", err)
+	}
 
 	return db, func() {
+		tx.Rollback()
 		if err := db.Close(); err != nil {
 			log.Printf("failed to close database connection: %s", err)
 		}
 	}
-}
-
-func checkRepositoryConsistentWithDB(t *testing.T, repo *blamewarrior.Repository, db *sql.DB) error {
-	var (
-		token   string
-		private bool
-	)
-
-	require.NoError(t, db.QueryRow(
-		`SELECT token, private FROM repositories WHERE id = $1 LIMIT 1;`,
-		repo.ID,
-	).Scan(
-		&token,
-		&private,
-	))
-
-	assert.Equal(t, token, repo.Token)
-
-	if private {
-		assert.True(t, repo.Private)
-	} else {
-		assert.False(t, repo.Private)
-	}
-
-	return nil
 }
