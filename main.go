@@ -55,6 +55,8 @@ func main() {
 
 	mux := pat.New()
 
+	mux.Get("/repositories/:owner/:name", http.HandlerFunc(handlers.GetRepositoryByFullName))
+	mux.Get("/repositories/:owner", http.HandlerFunc(handlers.GetListRepositoryByOwner))
 	mux.Post("/repositories", http.HandlerFunc(handlers.CreateRepository))
 	mux.Del("/repositories/:owner/:name", http.HandlerFunc(handlers.DeleteRepository))
 

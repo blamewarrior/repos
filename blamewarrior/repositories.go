@@ -20,67 +20,117 @@
 package blamewarrior
 
 import (
-	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	_ "github.com/lib/pq"
 )
 
 type Repository struct {
-	ID       int    `json:"-"`
-	FullName string `json:"full_name"`
-	Token    string `json:"token"`
-	Private  bool   `json:"private"`
+	ID      int    `json:"-"`
+	Owner   string `json:"owner"`
+	Name    string `json:"name"`
+	Private bool   `json:"private"`
+}
+
+func (repo *Repository) MarshalJSON() ([]byte, error) {
+	type Alias Repository
+	return json.Marshal(&struct {
+		FullName string `json:"full_name"`
+		*Alias
+	}{
+		FullName: repo.FullName(),
+		Alias:    (*Alias)(repo),
+	})
+}
+
+var IncorrectFullName = fmt.Errorf("incorrect full name for repository")
+
+func (repo *Repository) FullName() string {
+	return fmt.Sprintf("%s/%s", repo.Owner, repo.Name)
 }
 
 func (repo *Repository) Validate() error {
-	if repo.FullName == "" {
-		return fmt.Errorf("full name must not be empty")
+	if repo.Owner == "" {
+		return fmt.Errorf("owner must not be empty")
 	}
 
-	if repo.Token == "" {
-		return fmt.Errorf("token must not be empty")
+	if repo.Name == "" {
+		return fmt.Errorf("name must not be empty")
 	}
+
 	return nil
 }
 
-func GetRepositories(db *sql.DB, token string) (repos []Repository, err error) {
+func GetListRepositoryByOwner(q Queryer, owner string) (repositories []Repository, err error) {
+	rows, err := q.Query(GetListRepositoryByOwnerQuery, owner)
 
-	rows, err := db.Query(GetRepositoriesQuery, token)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var repo Repository
+
+		if err := rows.Scan(&repo.Owner, &repo.Name, &repo.Private); err != nil {
+			return nil, err
+		}
+
+		repositories = append(repositories, repo)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return repositories, nil
+}
+
+func GetRepositoryByFullName(q Queryer, fullName string) (*Repository, error) {
+
+	repo := &Repository{}
+
+	owner, name, err := parseFullName(fullName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = q.QueryRow(GetRepositoryQuery, owner, name).Scan(&repo.Owner, &repo.Name, &repo.Private)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch repositories: %s", err)
 	}
 
-	defer rows.Close()
-
-	for rows.Next() {
-
-		var repo Repository
-
-		if err = rows.Scan(&repo.FullName, &repo.Token, &repo.Private); err != nil {
-			return nil, fmt.Errorf("failed to fetch repository: %s", err)
-		}
-
-		repos = append(repos, repo)
-	}
-
-	return repos, rows.Err()
+	return repo, nil
 
 }
 
-func CreateRepository(db Queryer, repo *Repository) (err error) {
-	err = db.QueryRow(CreateRepositoryQuery, repo.FullName, repo.Token, repo.Private).Scan(&repo.ID)
+func CreateRepository(q Queryer, repo *Repository) (err error) {
+	err = q.QueryRow(CreateRepositoryQuery, repo.Owner, repo.Name, repo.Private).Scan(&repo.ID)
+
+	fmt.Println("first err")
+	fmt.Println(err)
 
 	if err != nil {
+		fmt.Println("second err")
+		fmt.Println(err)
 		return fmt.Errorf("failed to create repository: %s", err)
 	}
 
 	return err
 }
 
-func DeleteRepository(db Queryer, repositoryName string) (err error) {
-	_, err = db.Exec(DeleteRepositoryQuery, repositoryName)
+func DeleteRepository(q Queryer, fullName string) (err error) {
+	owner, name, err := parseFullName(fullName)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = q.Exec(DeleteRepositoryQuery, owner, name)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete repository: %s", err)
@@ -89,8 +139,25 @@ func DeleteRepository(db Queryer, repositoryName string) (err error) {
 	return err
 }
 
+func parseFullName(fullName string) (owner string, name string, err error) {
+	parameters := strings.Split(fullName, "/")
+	if len(parameters) != 2 {
+		return "", "", IncorrectFullName
+	}
+
+	owner, name = parameters[0], parameters[1]
+
+	if owner == "" || name == "" {
+		return "", "", IncorrectFullName
+	}
+
+	return owner, name, nil
+
+}
+
 const (
-	GetRepositoriesQuery  = `SELECT full_name, token, private FROM repositories WHERE token = $1`
-	CreateRepositoryQuery = `INSERT INTO repositories (full_name, token, private) VALUES ($1, $2, $3) RETURNING id`
-	DeleteRepositoryQuery = `DELETE FROM repositories WHERE full_name = $1`
+	GetListRepositoryByOwnerQuery = `SELECT owner, name, private FROM repositories WHERE owner=$1`
+	GetRepositoryQuery            = `SELECT owner, name, private FROM repositories WHERE owner=$1 AND name=$2`
+	CreateRepositoryQuery         = `INSERT INTO repositories (owner, name, private) VALUES ($1, $2, $3) RETURNING id`
+	DeleteRepositoryQuery         = `DELETE FROM repositories WHERE owner=$1 and name=$2`
 )

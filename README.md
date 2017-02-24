@@ -1,6 +1,6 @@
 # Repositories
 
-Handle info about tracked repositories and related github tokens
+Handle info about tracked repositories
 
 [![Current master build status](https://travis-ci.org/blamewarrior/repos.svg?branch=master)](https://travis-ci.org/blamewarrior/repos)
 

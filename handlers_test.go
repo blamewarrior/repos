@@ -20,16 +20,16 @@
 package main
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 
 	"testing"
 
@@ -40,7 +40,7 @@ import (
 	"github.com/blamewarrior/repos/blamewarrior/hooks"
 )
 
-func TestGetRepositoriesHandler(t *testing.T) {
+func TestGetRepositoryByFullName(t *testing.T) {
 	db, _, teardown := setup()
 
 	_, err := db.Exec("TRUNCATE repositories;")
@@ -53,41 +53,93 @@ func TestGetRepositoriesHandler(t *testing.T) {
 
 	defer teardown()
 
-	repo := &blamewarrior.Repository{FullName: "blamewarrior/test_repo", Token: "test_token", Private: true}
+	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "test", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
 
 	require.NoError(t, err)
 
 	results := []struct {
-		Token        string
+		Owner        string
+		Name         string
 		ResponseCode int
 		ResponseBody string
 	}{
 		{
-			Token:        "",
-			ResponseCode: http.StatusUnprocessableEntity,
-			ResponseBody: "Token must not be empty",
+			Owner:        "",
+			Name:         "",
+			ResponseCode: http.StatusBadRequest,
+			ResponseBody: "Incorrect full name\n",
 		},
 		{
-			Token:        "test_token",
+			Owner:        "blamewarrior",
+			Name:         "test",
 			ResponseCode: http.StatusOK,
-			ResponseBody: "[{\"full_name\":\"blamewarrior/test_repo\",\"token\":\"test_token\",\"private\":true}]\n",
+			ResponseBody: "{\"full_name\":\"blamewarrior/test\",\"owner\":\"blamewarrior\",\"name\":\"test\",\"private\":true}\n",
 		},
 	}
 
 	for _, result := range results {
-		req, err := http.NewRequest("POST", "/repositories?token="+result.Token, nil)
+		req, err := http.NewRequest("POST", "/repositories?:owner="+result.Owner+"&:name="+result.Name, nil)
 
 		require.NoError(t, err)
 
 		w := httptest.NewRecorder()
 
-		handlers.GetRepositories(w, req)
+		handlers.GetRepositoryByFullName(w, req)
 
 		assert.Equal(t, result.ResponseCode, w.Code)
 		assert.Equal(t, result.ResponseBody, fmt.Sprintf("%v", w.Body))
 	}
+}
 
+func TestGetListRepositoryByOwner(t *testing.T) {
+	db, _, teardown := setup()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	require.NoError(t, err)
+
+	client := hooks.NewClient()
+
+	handlers := &Handlers{client, db}
+
+	defer teardown()
+
+	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "test", Private: true}
+	err = blamewarrior.CreateRepository(db, repo)
+
+	require.NoError(t, err)
+
+	results := []struct {
+		Owner        string
+		Name         string
+		ResponseCode int
+		ResponseBody string
+	}{
+		{
+			Owner:        "",
+			ResponseCode: http.StatusBadRequest,
+			ResponseBody: "Incorrect owner\n",
+		},
+		{
+			Owner:        "blamewarrior",
+			ResponseCode: http.StatusOK,
+			ResponseBody: "[{\"full_name\":\"blamewarrior/test\",\"owner\":\"blamewarrior\",\"name\":\"test\",\"private\":true}]\n",
+		},
+	}
+
+	for _, result := range results {
+		req, err := http.NewRequest("POST", "/repositories?:owner="+result.Owner, nil)
+
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+
+		handlers.GetListRepositoryByOwner(w, req)
+
+		assert.Equal(t, result.ResponseCode, w.Code)
+		assert.Equal(t, result.ResponseBody, fmt.Sprintf("%v", w.Body))
+	}
 }
 
 func TestCreateRepositoryHandler(t *testing.T) {
@@ -119,17 +171,12 @@ func TestCreateRepositoryHandler(t *testing.T) {
 		ResponseBody string
 	}{
 		{
-			RequestBody:  `{"full_name":"blamewarrior/repos", "token":"test_token"}`,
+			RequestBody:  `{"owner":"blamewarrior", "name":"test"}`,
 			ResponseCode: http.StatusCreated,
 			ResponseBody: "",
 		},
 		{
-			RequestBody:  `{"full_name":"blamewarrior/repos"}`,
-			ResponseCode: http.StatusUnprocessableEntity,
-			ResponseBody: "Error when creating repository: token must not be empty",
-		},
-		{
-			RequestBody:  `{"full_name":"blamewarrior&*()/repos", "token":"test_token"}`,
+			RequestBody:  `{"owner":"blamewarrior&*()", "name":"repos"}`,
 			ResponseCode: http.StatusInternalServerError,
 			ResponseBody: "",
 		},
@@ -165,7 +212,7 @@ func TestDeleteRepositoryHandler(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	repo := &blamewarrior.Repository{FullName: "blamewarrior/test_repo", Token: "test_token", Private: true}
+	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
 
 	require.NoError(t, err)

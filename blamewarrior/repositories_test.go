@@ -45,16 +45,12 @@ func TestRepositoryValidation(t *testing.T) {
 		Err  error
 	}{
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token"},
+			Repo: &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos"},
 			Err:  nil,
 		},
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos"},
-			Err:  errors.New(`token must not be empty`),
-		},
-		{
-			Repo: &blamewarrior.Repository{Token: "test_token"},
-			Err:  errors.New(`full name must not be empty`),
+			Repo: &blamewarrior.Repository{Owner: "blamewarrior"},
+			Err:  errors.New(`name must not be empty`),
 		},
 	}
 
@@ -65,48 +61,71 @@ func TestRepositoryValidation(t *testing.T) {
 	}
 }
 
-func TestGetRepositories(t *testing.T) {
+func TestGetRepositoryByFullName(t *testing.T) {
 	db, teardown := setup()
 	defer teardown()
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
-	_, err = db.Exec(blamewarrior.CreateRepositoryQuery, "blamewarrior/hooks", "test_token", true)
+	_, err = db.Exec(blamewarrior.CreateRepositoryQuery, "blamewarrior", "repos", true)
 
 	require.NoError(t, err)
 
-	results, err := blamewarrior.GetRepositories(db, "test_token")
+	results, err := blamewarrior.GetRepositoryByFullName(db, "blamewarrior/repos")
 
 	require.NoError(t, err)
 	require.NotEmpty(t, results)
 }
 
-func TestCreateRepository(t *testing.T) {
+func TestGetListRepositoryByOwner(t *testing.T) {
 	db, teardown := setup()
 	defer teardown()
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
+	_, err = db.Exec(blamewarrior.CreateRepositoryQuery, "blamewarrior", "repos", true)
+
 	require.NoError(t, err)
+
+	results, err := blamewarrior.GetListRepositoryByOwner(db, "blamewarrior")
+
+	require.NoError(t, err)
+	require.NotEmpty(t, results)
+	assert.Equal(t, 1, len(results))
+}
+
+func TestCreateRepository(t *testing.T) {
 
 	results := []struct {
 		Repo *blamewarrior.Repository
 		Err  error
 	}{
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token", Private: true},
+			Repo: &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos", Private: true},
 			Err:  nil,
 		},
 		{
-			Repo: &blamewarrior.Repository{FullName: "blamewarrior&*()/repos", Token: "test_token", Private: true},
-			Err:  errors.New(`failed to create repository: pq: new row for relation "repositories" violates check constraint "proper_full_name"`),
+			Repo: &blamewarrior.Repository{Owner: "blamewarrior&*()", Name: "repos", Private: true},
+			Err:  errors.New(`failed to create repository: pq: new row for relation "repositories" violates check constraint "proper_owner"`),
+		},
+		{
+			Repo: &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos&*(", Private: true},
+			Err:  errors.New(`failed to create repository: pq: new row for relation "repositories" violates check constraint "proper_name"`),
 		},
 	}
 
 	for _, result := range results {
+		db, teardown := setup()
+
+		_, err := db.Exec("TRUNCATE repositories;")
+
+		require.NoError(t, err)
+
 		repo := result.Repo
 		err = blamewarrior.CreateRepository(db, repo)
-		assert.Equal(t, err, result.Err)
+		assert.Equal(t, result.Err, err)
+
+		teardown()
 	}
 }
 
@@ -118,16 +137,16 @@ func TestDeleteRepository(t *testing.T) {
 
 	require.NoError(t, err)
 
-	repo := &blamewarrior.Repository{FullName: "blamewarrior/repos", Token: "test_token", Private: true}
+	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
 	require.NoError(t, err)
 
-	err = blamewarrior.DeleteRepository(db, repo.FullName)
+	err = blamewarrior.DeleteRepository(db, repo.FullName())
 
 	require.NoError(t, err)
 }
 
-func setup() (db *sql.DB, teardownFn func()) {
+func setup() (tx *sql.Tx, teardownFn func()) {
 	dbName := os.Getenv("DB_NAME")
 	if dbName == "" {
 		log.Fatal("missing test database name (expected to be passed via ENV['DB_NAME'])")
@@ -144,13 +163,14 @@ func setup() (db *sql.DB, teardownFn func()) {
 	if err != nil {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
-	tx, err := db.Begin()
+
+	tx, err = db.Begin()
 
 	if err != nil {
 		log.Fatal("failed to create transaction, %s", err)
 	}
 
-	return db, func() {
+	return tx, func() {
 		tx.Rollback()
 		if err := db.Close(); err != nil {
 			log.Printf("failed to close database connection: %s", err)

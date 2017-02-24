@@ -37,27 +37,60 @@ type Handlers struct {
 	db     *sql.DB
 }
 
-func (h *Handlers) GetRepositories(w http.ResponseWriter, req *http.Request) {
+func (h *Handlers) GetRepositoryByFullName(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	token := req.URL.Query().Get("token")
+	owner := req.URL.Query().Get(":owner")
 
-	if token == "" {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, "Token must not be empty")
+	name := req.URL.Query().Get(":name")
+
+	fullName := fmt.Sprintf("%s/%s", owner, name)
+
+	results, err := blamewarrior.GetRepositoryByFullName(h.db, fullName)
+
+	if err != nil {
+
+		if err == blamewarrior.IncorrectFullName {
+			http.Error(w, "Incorrect full name", http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("%s\t%s\t%v\t%s", "GET", req.RequestURI, http.StatusInternalServerError, err)
+		}
 		return
 	}
 
-	results, err := blamewarrior.GetRepositories(h.db, token)
+	if err := json.NewEncoder(w).Encode(results); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Error when unmarshalling json")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	return
+}
+
+func (h *Handlers) GetListRepositoryByOwner(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	owner := req.URL.Query().Get(":owner")
+
+	if owner == "" {
+		http.Error(w, "Incorrect owner", http.StatusBadRequest)
+		return
+	}
+
+	results, err := blamewarrior.GetListRepositoryByOwner(h.db, owner)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "GET", req.RequestURI, http.StatusInternalServerError, err)
 		return
+
 	}
 
 	if err := json.NewEncoder(w).Encode(results); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
+		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "Error when unmarshalling json")
 		return
 	}
@@ -68,29 +101,26 @@ func (h *Handlers) GetRepositories(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
-
 	var err error
+	var body []byte
+
+	repository := &blamewarrior.Repository{}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	body, err := requestBody(req)
-
-	if err != nil {
+	if body, err = requestBody(req); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	repository := &blamewarrior.Repository{}
-
 	if err = json.Unmarshal(body, &repository); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
+		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "Error when unmarshalling json")
 		return
 	}
 
 	if err = repository.Validate(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprintf(w, "Error when creating repository: %s", err)
+		http.Error(w, fmt.Sprintf("Error when creating repository: %s", err), http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -107,19 +137,19 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err = h.client.CreateHook(repository.FullName); err != nil {
+	if err = h.client.CreateHook(repository.FullName()); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
 		return
 	}
 
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-			return
-		}
-		err = tx.Commit()
-	}()
+	if err = tx.Commit(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
+		return
+	}
+
+	defer tx.Rollback()
 
 	w.WriteHeader(http.StatusCreated)
 	return
