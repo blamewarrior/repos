@@ -63,8 +63,8 @@ func (repo *Repository) Validate() error {
 	return nil
 }
 
-func GetListRepositoryByOwner(q Queryer, owner string) (repositories []Repository, err error) {
-	rows, err := q.Query(GetListRepositoryByOwnerQuery, owner)
+func GetListRepositoryByOwner(runner SQLRunner, owner string) (repositories []Repository, err error) {
+	rows, err := runner.Query(GetListRepositoryByOwnerQuery, owner)
 
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func GetListRepositoryByOwner(q Queryer, owner string) (repositories []Repositor
 	return repositories, nil
 }
 
-func GetRepositoryByFullName(q Queryer, fullName string) (*Repository, error) {
+func GetRepositoryByFullName(runner SQLRunner, fullName string) (*Repository, error) {
 
 	repo := &Repository{}
 
@@ -98,7 +98,7 @@ func GetRepositoryByFullName(q Queryer, fullName string) (*Repository, error) {
 		return nil, err
 	}
 
-	err = q.QueryRow(GetRepositoryQuery, owner, name).Scan(&repo.Owner, &repo.Name, &repo.Private)
+	err = runner.QueryRow(GetRepositoryQuery, owner, name).Scan(&repo.Owner, &repo.Name, &repo.Private)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch repositories: %s", err)
@@ -108,29 +108,24 @@ func GetRepositoryByFullName(q Queryer, fullName string) (*Repository, error) {
 
 }
 
-func CreateRepository(q Queryer, repo *Repository) (err error) {
-	err = q.QueryRow(CreateRepositoryQuery, repo.Owner, repo.Name, repo.Private).Scan(&repo.ID)
-
-	fmt.Println("first err")
-	fmt.Println(err)
+func CreateRepository(runner SQLRunner, repo *Repository) (err error) {
+	err = runner.QueryRow(CreateRepositoryQuery, repo.Owner, repo.Name, repo.Private).Scan(&repo.ID)
 
 	if err != nil {
-		fmt.Println("second err")
-		fmt.Println(err)
 		return fmt.Errorf("failed to create repository: %s", err)
 	}
 
 	return err
 }
 
-func DeleteRepository(q Queryer, fullName string) (err error) {
+func DeleteRepository(runner SQLRunner, fullName string) (err error) {
 	owner, name, err := parseFullName(fullName)
 
 	if err != nil {
 		return err
 	}
 
-	_, err = q.Exec(DeleteRepositoryQuery, owner, name)
+	_, err = runner.Exec(DeleteRepositoryQuery, owner, name)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete repository: %s", err)
