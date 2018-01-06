@@ -258,7 +258,7 @@ func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {
 	tx, err := db.Begin()
 
 	if err != nil {
-		log.Fatal("failed to create transaction, %s", err)
+		log.Fatalf("failed to create transaction, %s", err)
 	}
 
 	return db, mux, func() {

@@ -167,7 +167,7 @@ func setup() (tx *sql.Tx, teardownFn func()) {
 	tx, err = db.Begin()
 
 	if err != nil {
-		log.Fatal("failed to create transaction, %s", err)
+		log.Fatalf("failed to create transaction, %s", err)
 	}
 
 	return tx, func() {
