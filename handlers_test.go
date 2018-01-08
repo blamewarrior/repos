@@ -34,29 +34,57 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/blamewarrior/repos/blamewarrior"
-	"github.com/blamewarrior/repos/blamewarrior/hooks"
+	"github.com/blamewarrior/repos/github"
 )
 
+type githubClientMock struct {
+	mock.Mock
+}
+
+func (ghClientMock *githubClientMock) UserRepositories(ctx github.Context, username string) (repos []blamewarrior.Repository, err error) {
+	args := ghClientMock.Called(ctx, username)
+	return args.Get(0).([]blamewarrior.Repository), args.Error(1)
+
+}
+
+type hooksClientMock struct {
+	mock.Mock
+}
+
+func (hooksClientMock *hooksClientMock) CreateHook(repositoryName string) error {
+	args := hooksClientMock.Called(repositoryName)
+	return args.Error(0)
+}
+
+func (hooksClientMock *hooksClientMock) DeleteHook(repositoryName string) error {
+	args := hooksClientMock.Called(repositoryName)
+	return args.Error(0)
+}
+
 func TestGetRepositoryByFullName(t *testing.T) {
-	db, _, teardown := setup()
+	db, teardown := setup()
+	defer teardown()
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
 	require.NoError(t, err)
 
-	client := hooks.NewClient()
-
-	handlers := &Handlers{client, db}
-
-	defer teardown()
-
 	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "test", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
-
 	require.NoError(t, err)
+
+	hooksClient := new(hooksClientMock)
+	ghClient := new(githubClientMock)
+
+	handlers := &Handlers{
+		db:          db,
+		hooksClient: hooksClient,
+		ghClient:    ghClient,
+	}
 
 	results := []struct {
 		Owner        string
@@ -92,23 +120,124 @@ func TestGetRepositoryByFullName(t *testing.T) {
 	}
 }
 
-func TestGetListRepositoryByOwner(t *testing.T) {
-	db, _, teardown := setup()
+func TestCreateRepositoryHandler(t *testing.T) {
+
+	db, teardown := setup()
 
 	_, err := db.Exec("TRUNCATE repositories;")
 
 	require.NoError(t, err)
 
-	client := hooks.NewClient()
+	defer teardown()
 
-	handlers := &Handlers{client, db}
+	hooksClient := new(hooksClientMock)
+	hooksClient.On("CreateHook", "blamewarrior/test").Return(nil)
+
+	ghClient := new(githubClientMock)
+
+	handlers := &Handlers{
+		db:          db,
+		hooksClient: hooksClient,
+		ghClient:    ghClient,
+	}
+
+	log.SetOutput(ioutil.Discard)
+
+	results := []struct {
+		RequestBody  string
+		ResponseCode int
+		ResponseBody string
+	}{
+		{
+			RequestBody:  `{"owner":"blamewarrior", "name":"test"}`,
+			ResponseCode: http.StatusCreated,
+			ResponseBody: "",
+		},
+		{
+			RequestBody:  `{"owner":"blamewarrior&*()", "name":"repos"}`,
+			ResponseCode: http.StatusInternalServerError,
+			ResponseBody: "",
+		},
+	}
+
+	for _, result := range results {
+		req, err := http.NewRequest("POST", "/repositories", strings.NewReader(result.RequestBody))
+
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+
+		handlers.CreateRepository(w, req)
+
+		assert.Equal(t, result.ResponseCode, w.Code)
+		assert.Equal(t, result.ResponseBody, fmt.Sprintf("%v", w.Body))
+	}
+
+	hooksClient.AssertExpectations(t)
+}
+
+func TestDeleteRepositoryHandler(t *testing.T) {
+	db, teardown := setup()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+	require.NoError(t, err)
 
 	defer teardown()
 
-	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "test", Private: true}
+	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos", Private: true}
 	err = blamewarrior.CreateRepository(db, repo)
 
 	require.NoError(t, err)
+
+	hooksClient := new(hooksClientMock)
+	hooksClient.On("DeleteHook", "blamewarrior/test_repo").Return(nil)
+	ghClient := new(githubClientMock)
+
+	handlers := &Handlers{
+		db:          db,
+		hooksClient: hooksClient,
+		ghClient:    ghClient,
+	}
+
+	urlValues := make(url.Values)
+	urlValues[":owner"] = []string{"blamewarrior"}
+	urlValues[":name"] = []string{"test_repo"}
+
+	req, err := http.NewRequest("DELETE", "/repositories?"+urlValues.Encode(), nil)
+
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+
+	handlers.DeleteRepository(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	hooksClient.AssertExpectations(t)
+}
+
+func TestGetListRepositoryByOwner(t *testing.T) {
+	db, teardown := setup()
+	defer teardown()
+
+	_, err := db.Exec("TRUNCATE repositories;")
+
+	require.NoError(t, err)
+
+	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "test", Private: true}
+	err = blamewarrior.CreateRepository(db, repo)
+	require.NoError(t, err)
+
+	hooksClient := new(hooksClientMock)
+	ghClient := new(githubClientMock)
+
+	ghClient.On("UserRepositories").Return([]blamewarrior.Repository{*repo})
+
+	handlers := &Handlers{
+		db:          db,
+		hooksClient: hooksClient,
+		ghClient:    ghClient,
+	}
 
 	results := []struct {
 		Owner        string
@@ -142,102 +271,8 @@ func TestGetListRepositoryByOwner(t *testing.T) {
 	}
 }
 
-func TestCreateRepositoryHandler(t *testing.T) {
-
-	db, mux, teardown := setup()
-
-	_, err := db.Exec("TRUNCATE repositories;")
-
-	require.NoError(t, err)
-
-	defer teardown()
-
-	server := httptest.NewServer(mux)
-
-	client := hooks.NewClient()
-	client.BaseURL = server.URL + "/hooks"
-
-	mux.HandleFunc("/hooks/repositories", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-	})
-
-	log.SetOutput(ioutil.Discard)
-
-	handlers := &Handlers{client, db}
-
-	results := []struct {
-		RequestBody  string
-		ResponseCode int
-		ResponseBody string
-	}{
-		{
-			RequestBody:  `{"owner":"blamewarrior", "name":"test"}`,
-			ResponseCode: http.StatusCreated,
-			ResponseBody: "",
-		},
-		{
-			RequestBody:  `{"owner":"blamewarrior&*()", "name":"repos"}`,
-			ResponseCode: http.StatusInternalServerError,
-			ResponseBody: "",
-		},
-	}
-
-	for _, result := range results {
-		req, err := http.NewRequest("POST", "/repositories", strings.NewReader(result.RequestBody))
-
-		require.NoError(t, err)
-
-		w := httptest.NewRecorder()
-
-		handlers.CreateRepository(w, req)
-
-		assert.Equal(t, result.ResponseCode, w.Code)
-		assert.Equal(t, result.ResponseBody, fmt.Sprintf("%v", w.Body))
-	}
-}
-
-func TestDeleteRepositoryHandler(t *testing.T) {
-	db, mux, teardown := setup()
-
-	_, err := db.Exec("TRUNCATE repositories;")
-
-	defer teardown()
-
-	server := httptest.NewServer(mux)
-
-	client := hooks.NewClient()
-	client.BaseURL = server.URL + "/hooks"
-
-	mux.HandleFunc("/hooks/repositories/blamewarrior/test_repo", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	repo := &blamewarrior.Repository{Owner: "blamewarrior", Name: "repos", Private: true}
-	err = blamewarrior.CreateRepository(db, repo)
-
-	require.NoError(t, err)
-
-	handlers := &Handlers{client, db}
-
-	urlValues := make(url.Values)
-	urlValues[":owner"] = []string{"blamewarrior"}
-	urlValues[":name"] = []string{"test_repo"}
-
-	req, err := http.NewRequest("DELETE", "/repositories?"+urlValues.Encode(), nil)
-
-	require.NoError(t, err)
-
-	w := httptest.NewRecorder()
-
-	handlers.DeleteRepository(w, req)
-
-	assert.Equal(t, http.StatusNoContent, w.Code)
-}
-
-func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {
+func setup() (db *sql.DB, teardownFn func()) {
 	dbName := os.Getenv("DB_NAME")
-
-	mux = http.NewServeMux()
 
 	if dbName == "" {
 		log.Fatal("missing test database name (expected to be passed via ENV['DB_NAME'])")
@@ -261,7 +296,7 @@ func setup() (db *sql.DB, mux *http.ServeMux, teardownFn func()) {
 		log.Fatalf("failed to create transaction, %s", err)
 	}
 
-	return db, mux, func() {
+	return db, func() {
 		tx.Rollback()
 
 		if err := db.Close(); err != nil {

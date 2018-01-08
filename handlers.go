@@ -30,11 +30,14 @@ import (
 
 	"github.com/blamewarrior/repos/blamewarrior"
 	"github.com/blamewarrior/repos/blamewarrior/hooks"
+
+	"github.com/blamewarrior/repos/github"
 )
 
 type Handlers struct {
-	client *hooks.Client
-	db     *sql.DB
+	ghClient    github.Client
+	hooksClient hooks.Client
+	db          *sql.DB
 }
 
 func (h *Handlers) GetRepositoryByFullName(w http.ResponseWriter, req *http.Request) {
@@ -137,7 +140,7 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err = h.client.CreateHook(repository.FullName()); err != nil {
+	if err = h.hooksClient.CreateHook(repository.FullName()); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
 		return
@@ -172,7 +175,7 @@ func (h Handlers) DeleteRepository(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err = h.client.DeleteHook(repositoryName); err != nil {
+	if err = h.hooksClient.DeleteHook(repositoryName); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "DELETE", req.RequestURI, http.StatusInternalServerError, err)
 		return
@@ -189,6 +192,25 @@ func (h Handlers) DeleteRepository(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 	return
 
+}
+
+func (h *Handlers) GetListGithubRepositories(w http.ResponseWriter, req *http.Request) {
+	ctx := github.Context{}
+
+	owner := req.URL.Query().Get(":owner")
+	repositories, err := h.ghClient.UserRepositories(ctx, owner)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("%s\t%s\t%v\t%s", "GET", req.RequestURI, http.StatusInternalServerError, err)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(repositories); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("%s\t%s\t%v\t%s", "GET", req.RequestURI, http.StatusInternalServerError, err)
+		return
+	}
 }
 
 func requestBody(r *http.Request) ([]byte, error) {

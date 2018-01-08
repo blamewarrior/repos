@@ -25,12 +25,17 @@ import (
 	"net/http"
 )
 
-type Client struct {
+type Client interface {
+	CreateHook(repositoryName string) error
+	DeleteHook(repositoryName string) error
+}
+
+type HooksClient struct {
 	BaseURL string
 	c       *http.Client
 }
 
-func (client *Client) CreateHook(repositoryName string) error {
+func (client *HooksClient) CreateHook(repositoryName string) error {
 
 	payload := []byte(fmt.Sprintf(`{"full_name":"%s"}`, repositoryName))
 
@@ -48,7 +53,7 @@ func (client *Client) CreateHook(repositoryName string) error {
 
 }
 
-func (client *Client) DeleteHook(repositoryName string) error {
+func (client *HooksClient) DeleteHook(repositoryName string) error {
 	url := client.BaseURL + "/repositories/" + repositoryName
 
 	req, err := http.NewRequest("DELETE", url, nil)
@@ -68,8 +73,8 @@ func (client *Client) DeleteHook(repositoryName string) error {
 	return nil
 }
 
-func NewClient() *Client {
-	client := &Client{
+func NewHooksClient() *HooksClient {
+	client := &HooksClient{
 		BaseURL: "https://blamewarrior.com/hooks",
 		c:       http.DefaultClient,
 	}

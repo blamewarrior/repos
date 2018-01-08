@@ -46,7 +46,7 @@ func TestCreateHook(t *testing.T) {
 			w.WriteHeader(result.ResponseStatus)
 		})
 
-		client := hooks.NewClient()
+		client := hooks.NewHooksClient()
 		client.BaseURL = testAPIEndpoint
 
 		err := client.CreateHook("blamewarrior/test_repo")
@@ -74,7 +74,7 @@ func TestDeleteHook(t *testing.T) {
 			w.WriteHeader(result.ResponseStatus)
 		})
 
-		client := hooks.NewClient()
+		client := hooks.NewHooksClient()
 		client.BaseURL = testAPIEndpoint
 
 		err := client.DeleteHook("blamewarrior/test_repo")

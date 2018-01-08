@@ -24,10 +24,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/blamewarrior/repos/github"
 	"github.com/bmizerany/pat"
 
 	"github.com/blamewarrior/repos/blamewarrior"
 	"github.com/blamewarrior/repos/blamewarrior/hooks"
+	"github.com/blamewarrior/repos/blamewarrior/tokens"
 )
 
 func main() {
@@ -49,14 +51,22 @@ func main() {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
 
-	client := hooks.NewClient()
+	tokenClient := tokens.NewTokenClient()
+	ghClient := github.NewGithubClient(tokenClient)
 
-	handlers := &Handlers{client, db}
+	hooksclient := hooks.NewHooksClient()
+
+	handlers := &Handlers{
+		db:          db,
+		hooksClient: hooksclient,
+		ghClient:    ghClient,
+	}
 
 	mux := pat.New()
 
 	mux.Get("/repositories/:owner/:name", http.HandlerFunc(handlers.GetRepositoryByFullName))
 	mux.Get("/repositories/:owner", http.HandlerFunc(handlers.GetListRepositoryByOwner))
+	mux.Get("/repositories/:owner/github", http.HandlerFunc(handlers.GetListGithubRepositories))
 	mux.Post("/repositories", http.HandlerFunc(handlers.CreateRepository))
 	mux.Del("/repositories/:owner/:name", http.HandlerFunc(handlers.DeleteRepository))
 
