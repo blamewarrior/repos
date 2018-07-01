@@ -70,9 +70,9 @@ func (client *TokenClient) GetToken(nickname string) (token string, err error) {
 	return token, nil
 }
 
-func NewTokenClient() *TokenClient {
+func NewTokenClient(baseURL string) *TokenClient {
 	client := &TokenClient{
-		BaseURL: "https://blamewarrior.com",
+		BaseURL: baseURL,
 		c:       http.DefaultClient,
 	}
 

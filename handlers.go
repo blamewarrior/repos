@@ -134,6 +134,8 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	defer tx.Rollback()
+
 	if err = blamewarrior.CreateRepository(tx, repository); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
@@ -151,8 +153,6 @@ func (h *Handlers) CreateRepository(w http.ResponseWriter, req *http.Request) {
 		log.Printf("%s\t%s\t%v\t%s", "POST", req.RequestURI, http.StatusInternalServerError, err)
 		return
 	}
-
-	defer tx.Rollback()
 
 	w.WriteHeader(http.StatusCreated)
 	return

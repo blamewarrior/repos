@@ -46,15 +46,25 @@ func main() {
 		Password: os.Getenv("DB_PASSWORD"),
 	}
 
+	hooksBaseURL := os.Getenv("BW_HOOKS_BASE_URL")
+	if hooksBaseURL == "" {
+		log.Fatal("missing hooks base url (expected to be passed via ENV['BW_HOOKS_BASE_URL'])")
+	}
+
+	tokensBaseURL := os.Getenv("BW_TOKENS_BASE_URL")
+	if tokensBaseURL == "" {
+		log.Fatal("missing tokens base url (expected to be passed via ENV['BW_HOOKS_BASE_URL'])")
+	}
+
 	db, err := blamewarrior.ConnectDatabase(dbName, opts)
 	if err != nil {
 		log.Fatalf("failed to establish connection with test db %s using connection string %s: %s", dbName, opts.ConnectionString(), err)
 	}
 
-	tokenClient := tokens.NewTokenClient()
+	tokenClient := tokens.NewTokenClient(tokensBaseURL)
 	ghClient := github.NewGithubClient(tokenClient)
 
-	hooksclient := hooks.NewHooksClient()
+	hooksclient := hooks.NewHooksClient(hooksBaseURL)
 
 	handlers := &Handlers{
 		db:          db,

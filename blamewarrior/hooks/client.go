@@ -73,9 +73,9 @@ func (client *HooksClient) DeleteHook(repositoryName string) error {
 	return nil
 }
 
-func NewHooksClient() *HooksClient {
+func NewHooksClient(baseURL string) *HooksClient {
 	client := &HooksClient{
-		BaseURL: "https://blamewarrior.com/hooks",
+		BaseURL: baseURL,
 		c:       http.DefaultClient,
 	}
 

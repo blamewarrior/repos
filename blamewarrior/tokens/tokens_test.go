@@ -34,7 +34,7 @@ func TestGetToken(t *testing.T) {
 		w.Write([]byte(userResponse))
 	})
 
-	client := tokens.NewTokenClient()
+	client := tokens.NewTokenClient("http://test.blamwarrior.com/tokens")
 	client.BaseURL = testAPIEndpoint
 
 	token, err := client.GetToken("blamewarrior")
